@@ -1,37 +1,37 @@
 # Goggles liveview lab
 
-Two ways to pull live video off DJI goggles. The rest of the tree is just
-different code for those two ways.
+Два метода. Не три. Не «ещё один драйвер». Два.
 
-Method 2 (IP) is **Goggles 3 only**. The UDP share-liveview path was taken
-off G3 Wi-Fi / RNDIS. Do not expect Integra / G2 / Goggles 2 to speak it.
+Метод 2 (IP) я снимал **только с Goggles 3**. На Integra / G2 / Goggles 2
+это UDP не обещаю — не проверял и не хочу врать.
 
 ```
-                    goggles
-         USB host          USB device / Wi-Fi AP
-              |                    |
-         METHOD 1              METHOD 2 (G3)
-         AOA gadget            share liveview
-         bulk 55 CC            UDP :9003
-              |                    |
-     linux-gadget/              ip-liveview/
-     mac-usb/                   wifi / rndis / tetherkit
+                    очки
+         USB host              USB device / Wi-Fi AP
+              |                         |
+         METHOD 1                   METHOD 2 (G3)
+         AOA gadget                 share liveview
+         bulk 55 CC                 UDP :9003
+              |                         |
+     linux-gadget/                   ip-liveview/
+     mac-usb/                        wifi / rndis / tetherkit
 ```
 
-| | Method 1 | Method 2 (Goggles 3 only) |
+|  | Method 1 | Method 2 (только Goggles 3) |
 | --- | --- | --- |
-| What the goggles are | USB host (OTG / dongle) | USB device, or Wi-Fi AP |
-| What the computer is | USB gadget (Pi or Mac) | UDP client on :9003 |
-| Cable | goggles host the port | no OTG; goggles stay a device |
-| Video | `55 CC 4A 57` + Annex-B | type-2 UDP, H.264 at +0x14 |
-| USB IDs | gadget `18d1:2d01` | goggles `2CA3:0020` |
+| очки | USB host (OTG / dongle) | USB device или Wi-Fi AP |
+| комп | gadget (Pi или Mac) | UDP-клиент на :9003 |
+| кабель | очки хостят порт | OTG выкл, очки остаются device |
+| видео | `55 CC 4A 57` + Annex-B | type-2 UDP, H.264 с +0x14 |
+| USB ID | gadget `18d1:2d01` | очки `2CA3:0020` |
 
-OTG on the goggles = method 1. OTG off + Share Live View (Wi-Fi or USB) = method 2.
+OTG на очках = метод 1. OTG выкл + Share Live View (Wi-Fi или USB) = метод 2.
+Перепутаешь роли — будешь неделю «чинить протокол», а виноват кабель.
 
 ## Method 1 — USB gadget
 
-Goggles enumerate you as an Android accessory, then dump H.264 on bulk.
-Same USB story on Linux and on a Mac; only the gadget API changes.
+Очки думают, что ты телефон. AOA, потом H.264 на bulk. На Linux и на Mac
+это **один** USB-метод, просто API гаджета разный. Я оба поднял.
 
 Linux (`linux-gadget/`), Pi 4B, `dwc2` peripheral:
 
@@ -41,7 +41,7 @@ sudo modprobe raw_gadget
 sudo env PYTHONPATH=linux-gadget python3 -m pi_endpoint.endpoint --out /tmp/goggles.h264 -v
 ```
 
-macOS (`mac-usb/`), Apple Silicon DRD (`usb-drd0` / `usb-drd1`):
+macOS (`mac-usb/`), Apple Silicon, контроллеры `usb-drd0` / `usb-drd1`:
 
 ```sh
 cd mac-usb
@@ -51,40 +51,42 @@ sudo ./link --controller usb-drd0
 ./scripts/unstage.sh
 ```
 
-Kext load is the usual 1TR / Allow / AuxKC mess. Notes: [docs/03-macos-kext.md](docs/03-macos-kext.md).
-USB/DUML: [docs/01-usb-gadget.md](docs/01-usb-gadget.md).
+Kext — классика 1TR / Allow / AuxKC, Apple как всегда. Писал тут:
+[docs/03-macos-kext.md](docs/03-macos-kext.md).
+DUML/AOA: [docs/01-usb-gadget.md](docs/01-usb-gadget.md).
 
-Phone-app captures with MACs and session blobs are not in this repo.
-`linux-gadget/pi_endpoint/gold_app_seq.py` is empty.
+Захваты с телефона с MAC/BSSID в репо не клал. `gold_app_seq.py` пустой
+специально — это не «недоделка», это чтобы в паблик не утекли серийники.
 
 ## Method 2 — IP liveview (Goggles 3)
 
-Goggles 3 can share live view without you pretending to be a phone.
+Вот тут я вообще не притворяюсь телефоном. G3 сами шарят liveview.
 
-On the goggles: **Share Live View to a Mobile Device via Wi-Fi**, or plug
-USB with OTG off (they show up as Remote NDIS).
+На очках: **Share Live View to a Mobile Device via Wi-Fi**, либо USB
+без OTG (они прикидываются Remote NDIS).
 
-| How you join | Goggles address | Your address |
+| как зайти | адрес очков | твой адрес |
 | --- | --- | --- |
-| Wi-Fi AP | `192.168.2.1:9003` | DHCP from the goggles SSID |
-| USB on Windows | `192.168.60.2:9003` | `192.168.60.1/24`, empty gateway |
-| USB on macOS | same | `tetherkit-cli` brings up `feth0`, then the same /24 |
+| Wi-Fi AP | `192.168.2.1:9003` | DHCP с SSID очков |
+| USB Windows | `192.168.60.2:9003` | `192.168.60.1/24`, gateway пустой |
+| USB macOS | то же | `tetherkit-cli` поднимает `feth0`, тот же /24 |
 
-UDP is the same in all three cases (`ip-liveview/protocol.py`):
+На Windows RNDIS из коробки. На маке драйвера нет — поэтому tetherkit,
+не потому что я так захотел. UDP один и тот же, см. `ip-liveview/protocol.py`.
 
-| Type | Size / notes |
+| Type | что это |
 | --- | --- |
-| 0 handshake | 48 bytes. Byte 7 = XOR of bytes 0..6. Session in the header. |
-| 2 video | Annex-B starts at offset `0x14`. Seq += 8. |
-| 4 ACK | Required. Optional RTX list; first missing seq must be first. |
-| 1 data | Telemetry ~10 Hz after handshake. |
+| 0 handshake | 48 байт. Байт 7 = XOR байт 0..6. Session в хедере. |
+| 1 data | телеметрия ~10 Hz после хендшейка |
+| 2 video | Annex-B с `0x14`. Seq += 8 |
+| 4 ACK | обязателен. RTX-список: первая дыра обязана быть первой |
 
-Bitrate hint is extra: USB interface 4 (`2CA3:0020` MI04), DUML `0x51/0x29`.
-Do not `set_configuration` or you kill RNDIS.
+Ещё bitrate hint: USB if 4 (`2CA3:0020` MI04), DUML `0x51/0x29`.
+`set_configuration` не трогать — убьёшь RNDIS, потом будешь винить очки.
 
-Stream is High Profile and almost never has an IDR. `ffplay -f h264` and
-VideoToolbox will sit there. `liveview.py` decodes with libavcodec
-`FLAG2_SHOW_ALL` and blits raw YUV.
+Стрим High Profile, IDR почти нет. `ffplay -f h264` и VideoToolbox тупо
+висят. Я это уже прошёл. `liveview.py` жрёт через libav `FLAG2_SHOW_ALL`
+и кидает в окно сырой YUV.
 
 ```sh
 python3 -m pip install -r ip-liveview/requirements.txt
@@ -92,21 +94,20 @@ python3 ip-liveview/liveview.py --wifi
 python3 ip-liveview/mac_wired.py --view
 ```
 
-More: [docs/02-ip-liveview.md](docs/02-ip-liveview.md).
+Подробнее: [docs/02-ip-liveview.md](docs/02-ip-liveview.md).
 
-Windows client reverse (SquirrelReceiver.exe): branch `exe-reverse`,
-plain text `docs/squirrel_exe_reverse.txt`.
+Разбор чужого Windows-клиента (SquirrelReceiver.exe) — обычный txt, без
+md-превью: [docs/squirrel_exe_reverse.txt](docs/squirrel_exe_reverse.txt).
+Exe в репо нет, копирайта на диск не льём.
 
-## Layout
+## Где что лежит
 
-| Path | Method | What |
+| папка | метод | |
 | --- | --- | --- |
 | `linux-gadget/` | 1 | Pi `raw_gadget` |
-| `mac-usb/` | 1 | macOS kext + userspace |
-| `ip-liveview/` | 2 (G3) | UDP receiver, Mac RNDIS, viewer |
-| `docs/` | | longer notes |
+| `mac-usb/` | 1 | kext + userspace на маке |
+| `ip-liveview/` | 2 (G3) | UDP, Mac RNDIS, вьюер |
+| `docs/` | | длинные заметки |
 
-```sh
-python3 -m unittest discover -s ip-liveview/tests
-PYTHONPATH=linux-gadget python3 -m unittest discover -s linux-gadget/tests
-```
+`make` в корне собирает userspace/kext мака. Тестов в паблик не клал —
+это лаба, не pytest-фестиваль.

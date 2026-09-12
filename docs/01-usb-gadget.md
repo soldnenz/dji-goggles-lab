@@ -1,29 +1,29 @@
 # Method 1 — USB gadget
 
-Goggles are the USB host. The computer is a gadget that looks like an
-Android accessory, then DUML and H.264 go over bulk.
+Очки = USB host. Комп = gadget, якобы Android accessory. Дальше DUML и
+H.264 по bulk.
 
-Two implementations in this repo: Linux `raw_gadget` and a macOS kext.
-Same method.
+Linux `raw_gadget` и маковский kext — **один метод**. Я просто сделал
+оба конца, потому что «на маке нельзя» мне уже надоело слышать.
 
 ## Enumeration
 
-| Step | What |
+| шаг | что происходит |
 | --- | --- |
-| 1 | Advertise VID `18d1`. Linux starts as PID `4ee0`, current Mac publish uses `2d00`. Strings: DJI / com.dji.logiclink / … |
-| 2 | Host: vendor `0x33` GET_PROTOCOL, `0x34` SEND_STRING, `0x35` START |
-| 3 | Re-enumerate as accessory `18d1:2d01` |
-| 4 | Bulk OUT = goggles → gadget, bulk IN = gadget → goggles |
+| 1 | VID `18d1`. Linux сначала PID `4ee0`, текущий Mac publish — `2d00`. Строки: DJI / com.dji.logiclink / … |
+| 2 | хост: vendor `0x33` GET_PROTOCOL, `0x34` SEND_STRING, `0x35` START |
+| 3 | перечисление accessory `18d1:2d01` |
+| 4 | bulk OUT очки→gadget, bulk IN gadget→очки |
 | 5 | DUML v1, CRC8 seed `0x77`, CRC16 seed `0x3692`, sender type `0x02` |
-| 6 | Identity cmds `0x81` / `0x82` / `0x88`. Video magic `55 CC 4A 57`, then LE32 length, then Annex-B |
+| 6 | identity `0x81` / `0x82` / `0x88`. Видео `55 CC 4A 57`, LE32 длина, Annex-B |
 
-If a firmware wants extra “arm” packets, capture them on your own unit.
-Do not check in MACs or Wi-Fi BSSIDs.
+Если прошивка просит ещё «arm» пакеты — снимай со **своих** очков.
+Чужие MAC/BSSID в git не тащи.
 
 ## Linux (`linux-gadget/`)
 
-Pi 4B. `dtoverlay=dwc2,dr_mode=peripheral`. Feed 5V on GPIO so USB-C stays
-data.
+Pi 4B. `dtoverlay=dwc2,dr_mode=peripheral`. Питание 5V на GPIO, иначе
+USB-C начнёт жрать VBUS очков и роли поедут.
 
 ```sh
 sudo modprobe raw_gadget
@@ -31,20 +31,18 @@ sudo env PYTHONPATH=linux-gadget python3 -m pi_endpoint.endpoint \
   --out /tmp/goggles.h264 --log-dir /tmp/goggles-logs -v
 ```
 
-`gold_app_seq.py` is empty (we stripped unique capture data). Generic
-identity replies are in `aoa.py`.
+`gold_app_seq.py` пустой. Identity без серийников — в `aoa.py`.
 
 ## macOS (`mac-usb/`)
 
-`IOUSBDeviceController` on `usb-drd0` / `usb-drd1`. The kext keeps the
-stock NCM description (`05AC:1905`), publishes accessory for a lease,
-puts NCM back if userspace dies. `link` opens user client type 123.
+`IOUSBDeviceController` на `usb-drd0` / `usb-drd1`. Kext держит стоковый
+NCM (`05AC:1905`), публикует accessory на lease, откатывает если userspace
+помер. `link` открывает user client type 123.
 
-Goggles must be host (OTG). `watch` shows which DRD moved.
+Очки строго host (OTG). Не тот Type-C — не тот drd. Смотри `watch`.
 
 Kext: [03-macos-kext.md](03-macos-kext.md).
 
-## Not this method
+## Это не оно
 
-RNDIS cable or the goggles Wi-Fi AP is method 2, and that UDP path is
-Goggles 3 only.
+RNDIS или Wi-Fi AP очков = метод 2, и он **только G3**.

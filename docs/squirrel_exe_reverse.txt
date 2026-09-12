@@ -1,19 +1,20 @@
-SquirrelReceiver.exe — full reverse (Goggles 3 IP liveview)
-==========================================================
+SquirrelReceiver.exe — полный разбор (Goggles 3 IP liveview)
+============================================================
 
-File is a Windows Store / Rust GUI. It talks UDP :9003 to DJI Goggles 3
-when they "Share Live View". We did not commit the .exe.
+Windows Store GUI на Rust. UDP :9003 на DJI Goggles 3, когда они жмут
+Share Live View. Сам .exe в git не клал — копирайт, и так всем понятно
+откуда константы.
 
-This is the protocol as recovered from rdata + Wireshark on a real G3.
-If the binary and the goggles disagree, trust the goggles.
+Снимал с rdata + Wireshark на живых G3. Если бинарь и очки спорят —
+верю очкам, не автору.
 
-Checked on Goggles 3 only. Not G2, not Integra.
+Только Goggles 3. G2 / Integra сюда не прикручивал.
 
 
-1. How we opened it
--------------------
+1. Как вскрывал
+---------------
 
-PE, 64-bit, Rust. strings / rdata still have source paths:
+PE64, Rust, в rdata до сих пор торчат пути:
 
     src\protocol.rs
     src\rtx.rs
@@ -25,13 +26,13 @@ PE, 64-bit, Rust. strings / rdata still have source paths:
     src\ui\app
     src\engine\rtsp_streaming.rs
 
-Useful VAs from the build we dumped (ASLR slide; rebase yourself):
+VA с того билда (ASLR, себе перебазируй):
 
-    0x141543120    48-byte type-0 handshake template
-    0x14026A1A0    bitrate.rs  (mov r8d, 0x57E4  ; 22500 kbps)
-                   stack interval 0xFA = 250 ms
+    0x141543120    шаблон type-0 handshake, 48 байт
+    0x14026A1A0    bitrate.rs  mov r8d, 0x57E4  ; 22500 kbps
+                   на стеке интервал 0xFA = 250 ms
 
-ASCII nearby:
+Рядом в ASCII:
 
     192.168.2.1
     192.168.60.2
@@ -44,80 +45,80 @@ ASCII nearby:
     Recording arm blocked by edition/access gate
     Lens 4:3 expansion blocked by edition/access gate
 
-Windows hardware ID string:
+Windows HWID:
 
     USB\VID_2CA3&PID_0020&MI_04
 
-Cross-check: Wireshark on the goggles AP (192.168.2.0/24) and on the
-RNDIS NIC (192.168.60.0/24). Handshake, type-2, type-4 match the
-constants in rdata.
+Проверка: Wireshark на AP очков (192.168.2.0/24) и на RNDIS
+(192.168.60.0/24). Handshake, type-2, type-4 совпали с rdata.
+То есть я не «угадал протокол по скриншоту стора».
 
 
-2. What this program actually is
---------------------------------
+2. Что это за программа
+-----------------------
 
-A Store overlay around an open UDP stream.
+Скин Microsoft Store вокруг открытого UDP.
 
-There is no session key. There is no HMAC. Byte 7 of the header is XOR
-of the first seven bytes. The 48-byte handshake is a literal in rdata;
-only the session u16 is patched.
+Нет session key. Нет HMAC. Байт 7 хедера — XOR первых семи. 48-байтовый
+handshake лежит литералом в rdata, патчится только session u16.
 
-Then they built:
+Дальше они наклепали:
 
-    - activation_overlay.rs   DEMO / ACTIVATED / REVOKED
-    - entitlement\store.rs    LUT, record, 4:3, RTSP gated
-    - bitrate "boost"         23-byte DUML on MI04, not encrypted
-    - Windows-only RNDIS      Mac has to fake Ethernet in userspace
-                              to speak the same 8-byte header
+    activation_overlay.rs    DEMO / ACTIVATED / REVOKED
+    entitlement\store.rs     LUT, запись, 4:3, RTSP за гейтом
+    bitrate "boost"          23 байта DUML на MI04, без шифра
+    RNDIS только Windows     на маке тот же 8-байтный хедер
+                             приходится поднимать через tetherkit
 
-The paywall is in the compositor. The socket does not care.
+Пейвол в композиторе. Сокету плевать. Красиво для стора, стыдно для
+протокола.
 
 
-3. Network
-----------
+3. Сеть
+-------
 
-    Join                         Goggles                  You
+    вход                         очки                     ты
     ---------------------------  -----------------------  ----------------------
-    Wi-Fi "share to phone"       192.168.2.1:9003         DHCP on goggles SSID
-    USB Remote NDIS (Win)        192.168.60.2:9003        192.168.60.1/24, no gw
-    USB on macOS                 same                     tetherkit-cli -> feth0
+    Wi-Fi "share to phone"       192.168.2.1:9003         DHCP с SSID очков
+    USB Remote NDIS (Win)        192.168.60.2:9003        192.168.60.1/24, без gw
+    USB на macOS                 то же                    tetherkit-cli -> feth0
 
-UDP only. Local port on the PC is typically ephemeral; they send to 9003
-on the goggles. Bind 0.0.0.0 or 192.168.60.1 for wired.
+Только UDP. Они шлют на 9003 очков. Бинд 0.0.0.0 или 192.168.60.1
+для кабеля.
 
-OTG on the goggles is the PHONE/gadget path (our method 1). For this
-UDP path OTG stays off so G3 remains a USB device (RNDIS).
+OTG на очках = метод 1 (телефон/gadget). Для этого UDP OTG выкл,
+G3 остаются USB device (RNDIS). Перепутаешь — я уже писал в README.
 
 
-4. UDP header (every packet, 8 bytes, little-endian)
-----------------------------------------------------
+4. UDP header (каждый пакет, 8 байт, LE)
+----------------------------------------
 
-    offset  type   field
-    0       u16    length | 0x8000     bit15 always set
+    off     тип    поле
+    0       u16    length | 0x8000      бит 15 всегда
     2       u16    session
     4       u16    seq
     6       u8     type
-    7       u8     xor(bytes[0..7))    i.e. xor of the first 7 bytes
+    7       u8     xor(bytes[0..7))     xor первых 7 байт
 
-Reject if byte7 is wrong. Reject if (length & 0x7FFF) != packet size.
+Не сошёлся xor — дропай. (length & 0x7FFF) != размер — дропай.
 
-    type  name
+    type  имя
     0     handshake
     1     data / windows / DUML
     2     video
     3     file
-    4     ACK (client -> goggles)
+    4     ACK (клиент -> очки)
     5     command
-    6     extra ACK
+    6     ещё ACK
 
-Type-2 seq steps by 8 (low 3 bits stay 0). Handshake seed for type-2
-sits at offset 8 of the type-0 packet (u16).
+Type-2 seq шагает на 8 (младшие 3 бита 0). Сид для type-2 — u16 на
+offset 8 в type-0.
 
 
-5. Type 0 — handshake (48 bytes)
---------------------------------
+5. Type 0 — handshake (48 байт)
+-------------------------------
 
-Template from rdata @ 0x141543120 (hex):
+Шаблон из rdata @ 0x141543120:
 
     30 80 3A DD 00 00 00 57
     D0 E9 64 00 64 00 C0 05
@@ -128,168 +129,166 @@ Template from rdata @ 0x141543120 (hex):
     00 01 01 04 0A 02
 
     30 80          length 0x0030 | 0x8000
-    3A DD          session 0xDD3A in the template
+    3A DD          session 0xDD3A в шаблоне
     00 00          seq
     00             type 0
-    57             xor of the previous 7
-    D0 E9          seed 0xE9D0  (this is what type-2 seq starts from
-                   if you use this template session; we patch session
-                   and recompute xor)
+    57             xor предыдущих семи
+    D0 E9          seed 0xE9D0  (с этого шаблонного session
+                   стартует type-2; мы патчим session и xor)
 
-Build:
+Сборка:
 
-    copy template
-    write session at [2:4]
-    rewrite length flag at [0:2]
+    скопировать шаблон
+    session в [2:4]
+    length|flag в [0:2]
     byte[7] = xor(byte[0] .. byte[6])
 
-Client retransmits type-0 until type-1/2 show up. No crypto.
+Клиент долбит type-0 пока не придут type-1/2. Крипты нет. Вообще.
 
 
-6. Type 2 — video
+6. Type 2 — видео
 -----------------
 
-    offset  field
+    off     поле
     0..7    header
     8       u16 window_start
     10      u16 window_end
     0x10    u8  frame index
-    0x11    bits: n_parts in low 7, part index packed with 0x12
-    0x14    H.264 Annex-B  (VIDEO_HEADER = 0x14)
+    0x11    n_parts в младших 7, part упакован с 0x12
+    0x14    H.264 Annex-B   VIDEO_HEADER = 0x14
 
-part = (b[0x11] >> 7) | ((b[0x12] & 0x1F) << 1)
-n_parts = b[0x11] & 0x7F
+    part    = (b[0x11] >> 7) | ((b[0x12] & 0x1F) << 1)
+    n_parts = b[0x11] & 0x7F
 
-Reassemble parts 0 .. n_parts-1 of the same frame index, concat H.264.
-G3 liveview is High Profile, long P-slice runs, almost no IDR.
-Hardware decoders that wait for a RAP hang. Their Windows build
-"just works" because something in that process already shows all
-slices (libav FLAG2_SHOW_ALL or equivalent). They never wrote that
-down, so everyone else debugs USB for a week.
+Склеить части 0 .. n_parts-1 одного frame, concat H.264.
+
+G3 liveview = High Profile, длинные P-slice, IDR почти нет.
+Железо которое ждёт RAP — висит. Их Windows «просто работает»,
+потому что внутри уже SHOW_ALL (или аналог). Они это нигде не
+написали. Люди неделю ковыряют USB. Я тоже ковырял. Потом открыл
+декодер и стало смешно.
 
 
-7. Type 4 — ACK (required)
---------------------------
+7. Type 4 — ACK (без него стрим дохнет)
+---------------------------------------
 
-If you stop sending type-4, the source dies. Overlay can still say
-ACTIVATED. There is no second keepalive.
+Перестал слать type-4 — источник сдох. Оверлей может дальше писать
+ACTIVATED. Второго keepalive нет.
 
-    offset          field
-    0..7            header, type=4, seq usually 0
+    off             поле
+    0..7            header, type=4, seq обычно 0
     8               u16  type2 window_start
     10              u16  type2 window_end
     12              u16  resend_count
     14              u16  resend[0]
     14+2*n          ...
-    then            u16 type3_start, type3_end, u16 zero
-    then            u16 type5_start, type5_end, u16 zero, u16 zero,
+    дальше          u16 type3_start, type3_end, u16 zero
+    дальше          u16 type5_start, type5_end, u16 zero, u16 zero,
                     u16 duml_len
-    then            optional DUML bytes
+    дальше          опциональный DUML
 
-Resend list = missing type-2 sequence numbers, in gap order, step 8.
-THE LIST IS IGNORED UNLESS IT STARTS AT THE FIRST HOLE.
+Resend = пропущенные type-2 seq, по дырам, шаг 8.
+СПИСОК ИГНОРИТСЯ ЕСЛИ НЕ НАЧИНАЕТСЯ С ПЕРВОЙ ДЫРЫ.
 
-That is in rtx.rs. Their own UI advertises "Loss recovery". If the
-list is shuffled or starts at a later gap, G3 throws the whole ACK
-away and you get "random" Wi-Fi artefacting. The goggles are being
-literal. The client is being sloppy.
+Это у них в rtx.rs. UI орёт Loss recovery. Перемешал список или
+начал не с первой дыры — G3 кидает ACK целиком, «рандомные» артефакты
+на Wi-Fi. Очки буквальные. Клиент кривой. Автор, ну серьёзно.
 
 
 8. Type 1 — data
 ----------------
 
-~10 Hz after handshake.
+~10 Hz после хендшейка.
 
-    [8]  u16 window_start
-    [10] u16 window_end
+    [8]    u16 window_start
+    [10]   u16 window_end
     [0x10] type3 window
     [0x18] type5 window
-    [32] u16 duml_len
-    [34] DUML blob (0x55 ...)
+    [32]   u16 duml_len
+    [34]   DUML (0x55 ...)
 
-DUML v1: 0x55, len in low 10 bits of u16 at [1], CRC8 of first 3
-bytes at [3] seed 0x77, CRC16 of body seed 0x3692. Same tables as
-every other DJI MB dump on the internet.
+DUML v1: 0x55, длина в младших 10 битах u16@[1], CRC8 первых 3 байт
+@[3] seed 0x77, CRC16 body seed 0x3692. Те же таблицы что у всего DJI
+MB за последние лет десять. Не секрет.
 
     sender 0x1B = goggles
     sender 0x02 = app
-    cmdset 0x00 general, 0x02 camera, 0x51 appears on MI04 boost, ...
+    cmdset 0x00 general, 0x02 camera, 0x51 на MI04 boost, ...
 
 
 9. Type 5
 ---------
 
-Command wrapper. Seq step 8 like type-2. Body starts with two windows,
-then counter, 0x01 0x00 0x00, then DUML.
+Обёртка команд. Seq шаг 8 как type-2. Сначала два window, потом
+counter, 0x01 0x00 0x00, потом DUML.
 
 
-10. MI04 bitrate hint (optional, USB, not UDP)
-----------------------------------------------
+10. MI04 bitrate (USB, не UDP)
+------------------------------
 
-Composite device 2CA3:0020
+Композит 2CA3:0020
 
-    if 0,1    RNDIS          Windows in-box / tetherkit on Mac
-    if 4      vendor ff/43/01  bulk OUT+IN     "MI04"
+    if 0,1    RNDIS           Windows inbox / tetherkit на маке
+    if 4      vendor ff/43/01 bulk OUT+IN     "MI04"
 
-TetherKit claims 0+1. Leave 4 alone: claim_interface, do NOT
-set_configuration, do NOT reset, or RNDIS dies. If their boost
-worker resets the composite device, that is a bug they shipped.
+TetherKit забирает 0+1. If 4 не трогать конфигом: claim_interface,
+НЕ set_configuration, НЕ reset — иначе RNDIS отвалится. Если их
+boost-воркер ресетит весь композит, это баг который они выкатили
+в стор. Не я.
 
-DUML on MI04 (bitrate.rs):
+DUML на MI04 (bitrate.rs):
 
     sender     0x1B
     receiver   0xEE
     cmdset     0x51
     cmd        0x29
     payload    eb fe ef be 03 00 0f 00 02 01 01 00 00 00 00 01 00 00 00
-               + u32le kbps   (default 22500 = 0x57E4)
-    period     250 ms (0xFA)
+               + u32le kbps   (по умолчанию 22500 = 0x57E4)
+    период     250 ms (0xFA)
 
-UI minimum they used: 22000 (0x55F0). This is a bitrate *report*,
-not a license. Anyone can send it.
-
-
-11. CRC tables (DUML)
----------------------
-
-CRC8 seed 0x77, CRC16 seed 0x3692. Tables are the public DJI ones
-(same 256-byte / 512-byte blobs as in protocol.py). Not a secret.
+Их UI-минимум 22000 (0x55F0). Это report битрейта, не лицензия.
+Шлёт кто угодно.
 
 
-12. Mistakes in the exe, in order of how much time they wasted
---------------------------------------------------------------
+11. CRC (DUML)
+--------------
 
-1. Handshake is a constant. Overlay talks like it is a licensed
-   session. It is XOR-7.
-
-2. RTX that only works if the first missing seq is first in the
-   list. Documented in their own rtx.rs, then the UI lies.
-
-3. High Profile without IDR. Decoder assumed "normal live H.264".
-   It is not. FLAG2_SHOW_ALL or you get a black window and blame
-   the cable.
-
-4. ACK is the session. Stop ACK, stream dies, overlay still green.
-
-5. MI04 + RNDIS on one composite device. Reset/set_config from the
-   boost path kills the NIC. Author clearly tested on Windows with
-   the in-box RNDIS driver and never claimed if 4 in parallel
-   without a bus reset.
-
-6. Edition gates on LUT / record / 4:3 while the wire is the same
-   for DEMO and ACTIVATED. Copied the wrong layer if you used this
-   binary as a spec for "what the goggles allow".
-
-7. No Mac RNDIS. They shipped a Store app, not a protocol spec, so
-   the same 8-byte header needs a userspace Ethernet kludge on
-   Darwin.
+CRC8 seed 0x77, CRC16 seed 0x3692. Таблицы публичные, те же что в
+protocol.py. Это не ключ и не «наша крипта».
 
 
-13. What we did not copy
-------------------------
+12. Ошибки exe, по тому сколько времени они сожрали
+---------------------------------------------------
 
-Store tokens, package identity, activation API, the .exe, their
-GStreamer RTSP path, LUT packs, UI.
+1. Handshake — константа. Оверлей делает вид что сессия лицензирована.
+   Это XOR-7. Я бы постеснялся.
 
-ip-liveview/ on main is a receiver written from the wire + these
-constants. It is not a repack of SquirrelReceiver.
+2. RTX работает только если первая missing seq первая в списке.
+   Сами написали в rtx.rs. UI всё равно врёт.
+
+3. High Profile без IDR. Декодер ждали «нормальный live H.264».
+   Нет. FLAG2_SHOW_ALL или чёрное окно и нытьё про кабель.
+
+4. ACK и есть сессия. Снял ACK — стрим мёртв, оверлей зелёный.
+
+5. MI04 + RNDIS на одном композите. Reset/set_config с boost убивает
+   NIC. Тестили на винде с inbox RNDIS и никогда не клеймили if 4
+   параллельно без bus reset. Видно.
+
+6. Гейты LUT / record / 4:3, при этом на проводе DEMO и ACTIVATED
+   одинаковые. Кто взял exe как спеку «что очки разрешают» — взял
+   не тот слой.
+
+7. Нет Mac RNDIS. Выкатили Store-апп, не спеку протокола. Из-за этого
+   на Darwin тот же хедер через userspace Ethernet. Не гордость
+   экосистемы, просто лень.
+
+
+13. Чего сюда не тащил
+----------------------
+
+Токены стора, package identity, activation API, сам exe, их GStreamer
+RTSP, LUT-паки, UI.
+
+ip-liveview/ — приёмник с провода и этих констант. Это не репак
+SquirrelReceiver. Если автор обидится — пусть сначала починит RTX.

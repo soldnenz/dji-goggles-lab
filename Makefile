@@ -1,4 +1,4 @@
-.PHONY: userspace kext clean test
+.PHONY: userspace kext clean
 
 userspace:
 	$(MAKE) -C mac-usb userspace
@@ -8,7 +8,3 @@ kext:
 
 clean:
 	$(MAKE) -C mac-usb clean
-
-test:
-	python3 -m unittest discover -s ip-liveview/tests
-	PYTHONPATH=linux-gadget python3 -m unittest discover -s linux-gadget/tests

@@ -1,6 +1,7 @@
-# mac-usb — method 1 on Apple Silicon
+# mac-usb — метод 1 на Apple Silicon
 
-Same USB role as `linux-gadget/`. Notes: [docs/01-usb-gadget.md](../docs/01-usb-gadget.md),
+Тот же USB-роль что `linux-gadget/`.
+[docs/01-usb-gadget.md](../docs/01-usb-gadget.md),
 [docs/03-macos-kext.md](../docs/03-macos-kext.md).
 
 ```sh

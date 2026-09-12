@@ -1,13 +1,13 @@
-# Method 1 kext on macOS
+# Method 1 kext на macOS
 
-This is Apple policy, not USB.
+Это не USB. Это политика Apple, и она бесит.
 
-| Check | What happens |
+| проверка | что будет |
 | --- | --- |
-| Recovery, reduced security / allow third-party kexts | without this `kmutil load` fails on a good binary |
-| Privacy & Security → Allow `com.aspan.usbbridge` | first copy into `/Library/Extensions` |
-| AuxKC | often needs a reboot after Allow; if `kmutil showloaded` has no `aspan`, you are still here |
-| Signature | `make kext` is ad-hoc (`codesign --sign -`). Fine for a lab Mac. Not notarized. |
+| Recovery → reduced security / third-party kexts | без этого `kmutil load` шлёт даже идеальный бинарь |
+| Privacy & Security → Allow `com.aspan.usbbridge` | после первого копирования в `/Library/Extensions` |
+| AuxKC | часто ребут после Allow; `kmutil showloaded` без `aspan` = ты ещё тут |
+| подпись | `make kext` ad-hoc (`codesign --sign -`). Для лабы ок. Нотаризации нет и не будет |
 
 ```sh
 cd mac-usb
@@ -17,16 +17,15 @@ kmutil showloaded | grep aspan
 ./scripts/unstage.sh
 ```
 
-| kmutil noise | Actual problem |
+| kmutil пишет | на самом деле |
 | --- | --- |
-| not approved | Allow, run `stage.sh` again |
-| AuxKC / collection | reboot once |
-| wrong arch | Makefile is `arm64e` only |
-| SIP | Recovery. Do not cargo-cult Intel `csrutil` |
+| not approved | Allow, снова `stage.sh` |
+| AuxKC / collection | один ребут |
+| wrong arch | Makefile только `arm64e` |
+| SIP | Recovery. Intel-`csrutil` с хабра не копипастить |
 
-The kext leases the gadget description so a dead userspace process does
-not leave the controller stuck as an accessory. After `unstage.sh`, reboot
-if AuxKC still has the bundle.
+Kext держит lease на gadget description: userspace помер — откат на NCM,
+а не вечный accessory на контроллере. После `unstage.sh` если AuxKC
+ещё держит бандл — ребут.
 
-Do not commit the built `.kext`, `probe` IORegistry dumps, or Apple
-signing identities.
+Собранный `.kext`, дампы `probe` и Apple-сертификаты в паблик не нести.
