@@ -12,8 +12,20 @@ OTG **выкл**.
 | Windows USB | Remote NDIS | `192.168.60.1/24`, без gateway | `192.168.60.2:9003` |
 | macOS USB | `tetherkit-cli` → `feth0` | тот же /24 | тот же peer |
 
-`protocol.py` / `receiver.py` / `liveview.py` общие. `mac_wired.py` только
-поднимает NIC, потому что у Apple нет RNDIS. Спасибо Куку.
+Приёмник: `ip-liveview/c/g3lv`. Python (`protocol.py` / `liveview.py`) —
+тот же протокол и вьюер. `mac_wired.py` поднимает NIC, потому что у Apple
+нет RNDIS. Спасибо Куку.
+
+```mermaid
+sequenceDiagram
+  participant C as g3lv
+  participant G as G3 UDP 9003
+  C->>G: type-0 handshake 48B
+  G-->>C: type-1 telemetry
+  C->>G: type-4 ACK
+  G-->>C: type-2 H.264 +0x14
+  C->>G: type-4 ACK resend first-hole
+```
 
 ## UDP header (8 байт)
 

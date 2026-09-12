@@ -8,6 +8,15 @@ Linux `raw_gadget` и маковский kext — **один метод**. Я п
 
 ## Enumeration
 
+```mermaid
+flowchart TB
+  E["VID 18d1"] --> AOA["host 0x33 / 0x34 / 0x35"]
+  AOA --> ACC["accessory 18d1:2d01"]
+  ACC --> B["bulk OUT/IN"]
+  B --> D["DUML v1 CRC8 0x77 CRC16 0x3692"]
+  D --> V["55 CC 4A 57 + Annex-B"]
+```
+
 | шаг | что происходит |
 | --- | --- |
 | 1 | VID `18d1`. Linux сначала PID `4ee0`, текущий Mac publish — `2d00`. Строки: DJI / com.dji.logiclink / … |

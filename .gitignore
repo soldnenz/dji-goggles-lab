@@ -1,0 +1,6 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+*.o
+ip-liveview/c/g3lv
+*.h264

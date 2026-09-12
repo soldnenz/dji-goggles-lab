@@ -1,11 +1,14 @@
 # ip-liveview — метод 2, только Goggles 3
 
-Wi-Fi, Windows RNDIS и tetherkit на маке — один `protocol.py`.
-[docs/02-ip-liveview.md](../docs/02-ip-liveview.md).
+Приёмник: **C**, `c/g3lv`. Один UDP на Wi-Fi / RNDIS / tetherkit.
 
 ```sh
-python3 -m pip install -r requirements.txt
-python3 receiver.py --wifi --out live.h264 -v
-python3 liveview.py --wifi
-python3 mac_wired.py --view
+make -C c
+./c/g3lv --wifi --out live.h264 -v
+./c/g3lv --wired --boost -v
 ```
+
+Python (`protocol.py` / `receiver.py` / `liveview.py`) — тот же протокол,
+плюс декодер в окно. `mac_wired.py` поднимает NIC на маке.
+
+Графики и разбор: [../README.md](../README.md), [docs/02-ip-liveview.md](../docs/02-ip-liveview.md).

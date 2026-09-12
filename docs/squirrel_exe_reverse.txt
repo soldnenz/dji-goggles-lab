@@ -1,115 +1,107 @@
-SquirrelReceiver.exe — разбор, чтобы автору было стыдно
-========================================================
+SquirrelReceiver.exe — notes from the binary and the wire
+=========================================================
 
-Бинарник: PE64, ~28 МБ, MD5 1661d3520247efddce2576f02a5fa4e4
-(лежит у меня в IDA, в паблик git 28 метров стора не пойдут — копирайт.
-Хочешь «дамп всего exe» — открой свой SquirrelReceiver.exe, md5 выше.
-Ниже — дамп того, что из него реально торчит: rdata, строки, VA, HTML
-мануал который они засунули внутрь, потому что Store-сборка даже IP
-поставить не умеет.)
+PE64, ~28 MB, MD5 1661d3520247efddce2576f02a5fa4e4.
+The Store binary is not in this repo (copyright, size). Strings / VAs
+for this hash: docs/squirrel_rdata_dump.txt. Open your own copy if you
+want the file.
 
-Снимал с живых Goggles 3 + этот exe. Если очки и автор спорят — очки
-правы. Автор пусть обижается, RTX он так и не починил.
+Captured against live Goggles 3. Where the UI and the UDP disagree, the
+UDP wins.
 
 
-0. Кто ты, «Ich»
-----------------
+0. Build leftovers
+------------------
 
-В релизном exe до сих пор:
+Release still contains Cargo registry paths:
 
     C:\Users\Ich\.cargo\registry\src\index.crates.io-...
 
-Release build с debug panic paths и домашней папкой. Не «опенсорс
-культура». Ты забыл --release чистить, либо тебе плевать. Имя из
-профиля Windows ты сам зашил в стор. Поздравляю, Ich.
-
-Дальше по тексту «автор» = тот, кто это выкатил. Не DJI. DJI хотя бы
-очки делают.
+Debug panic paths + a Windows profile name in a Store build. Build
+hygiene, not a protocol secret. “Author” below = whoever shipped this
+exe. Not DJI.
 
 
-1. Что это за поделка
----------------------
+1. What the binary actually is
+------------------------------
 
-Microsoft Store GUI (eframe/egui + wgpu + gstreamer-rtsp) вокруг
-открытого UDP. Нет ключа сессии. Нет HMAC. Байт 7 хедера — XOR семи
-байт. 48-байтный handshake — литерал в rdata @ 0x141543120. Патчится
-session u16. Всё.
+Microsoft Store GUI (eframe/egui + wgpu + gstreamer-rtsp) on the same
+open UDP liveview the goggles already share.
 
-Потом на это натянули:
+No session key. No HMAC. Header byte 7 is XOR of bytes 0..6.
+48-byte handshake is a literal in rdata @ 0x141543120; only session
+u16 is patched.
+
+Edition UI lives in compositor overlays, not on the socket:
 
     src\ui\activation_overlay.rs
     src\ui\demo_watermark_overlay.rs
     src\entitlement\store.rs
-    src\h264_bootstrap_image.rs     <-- вот это шедевр, читай п.6
+    src\h264_bootstrap_image.rs     — decoder workaround, §6
 
-Пейвол в композиторе. Сокету плевать, ACTIVATED ты или DEMO 5 минут.
-«Consider buying the full version» на XOR-7. Я бы удалил стор и уехал
-в лес.
+DEMO vs ACTIVATED does not change handshake, ACK, or type-2. LUT /
+record / 4:3 gates are local. The wire does not care.
 
 
-2. Карта функций: их rust vs мой код
-------------------------------------
+2. Module map (their rust ↔ this lab)
+-------------------------------------
 
-Их модуль (из rdata)              Что делает                    У меня
--------------------------------   ---------------------------   ----------------
-protocol.rs                       хедер, xor7, типы 0..6        protocol.py
-                                  handshake template            build_handshake
-                                  parse type-1/2                parse_data / parse_video
-rtx.rs                            окно type-2, resend list      LossWindow, seq_ahead
-                                  шаг seq = 8                   SEQ_STEP
-reassembly.rs                     склейка частей кадра          FrameAssembler
-device_control\duml.rs            DUML v1 CRC8/16               duml_crc8/16, build_duml
-device_control\bitrate.rs         22500 kbps / 250 ms           build_bitrate_boost
-device_control\mi04.rs            USB if 4 2CA3:0020            mi04.py Mi04
-device_control\worker.rs          крутит boost                  Session.run boost
-device_control\camera*.rs         камера по DUML                (не копировал UI)
-engine\transport.rs               UDP bind/sendto/recvfrom      receiver.py Session
-engine\stream.rs                  live / stall                  video_timeout
-engine\preview_pipeline.rs        декодер                       liveview.H264Decoder
-engine\rtsp_streaming.rs          RTSP                          MpegTsPublisher (локально)
-engine\recording.rs               запись + fake IDR             --out live.h264
-h264_bootstrap_image.rs           ПОДСТАВА, см ниже             parameter_sets() честно
-goggles_adapter.rs                RNDIS 192.168.60.1            mac_wired.py / Windows NIC
-entitlement\store.rs              LUT/record/4:3 гейт           нет гейта, провод тот же
-ui\activation_overlay.rs          DEMO/ACTIVATED/REVOKED        нет
-ui\app.rs                         кнопки Loss recovery, boost   --rtx --boost
+Their module (rdata)                 Role                          Here
+-----------------------------------  ----------------------------  ----------------
+protocol.rs                          header, xor7, types 0..6      protocol.py / c/
+                                     handshake template            build_handshake
+                                     parse type-1/2                parse_data / parse_video
+rtx.rs                               type-2 window, resend list    LossWindow / G3Loss
+                                     seq step 8                    SEQ_STEP / G3_SEQ_STEP
+reassembly.rs                        frame parts                   FrameAssembler / G3Frame
+device_control\duml.rs               DUML v1 CRC8/16               duml_crc* / g3_build_duml
+device_control\bitrate.rs            22500 kbps / 250 ms           build_bitrate_boost
+device_control\mi04.rs               USB if 4 2CA3:0020            mi04.py / mi04.c
+device_control\worker.rs             boost loop                    Session / g3lv
+device_control\camera*.rs            camera DUML                   not ported as UI
+engine\transport.rs                  UDP bind/sendto/recvfrom      receiver.py / g3lv.c
+engine\stream.rs                     live / stall                  video_timeout
+engine\preview_pipeline.rs           decoder                       liveview.H264Decoder
+engine\rtsp_streaming.rs             RTSP                          MpegTsPublisher
+engine\recording.rs                  record + bootstrap AU         --out live.h264
+h264_bootstrap_image.rs              fake IDR into preview/file    parameter_sets() only
+goggles_adapter.rs                   RNDIS 192.168.60.1            mac_wired.py / NIC
+entitlement\store.rs                 LUT/record/4:3 gate           no edition gate
+ui\activation_overlay.rs             DEMO/ACTIVATED/REVOKED        none
+ui\app.rs                            Loss recovery, boost toggles  --rtx --boost
 
-Их sendto @ IAT 140F8D150, recvfrom 140F8D160, bind 140F8D140.
+IAT: sendto 140F8D150, recvfrom 140F8D160, bind 140F8D140.
 Handshake xref: sub_1400C0320 ← 141543120.
 
 
-3. Сеть (Goggles 3 only)
-------------------------
+3. Network (Goggles 3 only)
+---------------------------
 
-    вход                      очки                    ты
+    path                      goggles                 you
     ------------------------  ----------------------  -------------------------
     Wi-Fi Share Live View     192.168.2.1:9003        DHCP
-    USB RNDIS Win             192.168.60.2:9003       192.168.60.1/24, gw пустой
-    USB macOS                 то же                   tetherkit → feth0
+    USB RNDIS Win             192.168.60.2:9003       192.168.60.1/24, no gw
+    USB macOS                 same                    tetherkit → feth0
 
-Строки в exe, слипшиеся как автор собрал релиз:
+Packed strings in the binary (no space between endpoints):
 
     192.168.2.1:9003192.168.60.2:9003, Liveview endpoints configured:
 
-Даже пробел между адресами вставить не смог. «Liveview endpoints
-configured» — звучит гордо для двух констант.
-
-Store edition:
+Store edition cannot set the NIC IP itself:
 
     The Microsoft Store edition of SquirrelReceiver cannot change
     Windows network adapter settings automatically.
 
-Поэтому внутрь 28 МБ запихнули HTML-мануал
-«goggles-rndis-manual-setup-windows-10.html» / windows-11: скрины,
-«click OK», «leave default gateway empty». Продукт, который не умеет
-поставить 192.168.60.1, учит бабушку кликать по Ethernet. Ich, это
-не приложение. Это PDF с UDP.
+Hence the embedded HTML manuals
+goggles-rndis-manual-setup-windows-10.html / windows-11: screenshots,
+“click OK”, “leave default gateway empty”. Packaging constraint of the
+Store sandbox, not a second protocol.
 
 
-4. UDP header — protocol.rs / pack_header / parse_header / xor7
----------------------------------------------------------------
+4. UDP header — protocol.rs
+---------------------------
 
-8 байт LE.
+8 bytes LE.
 
     0  u16  length | 0x8000
     2  u16  session
@@ -117,36 +109,33 @@ Store edition:
     6  u8   type
     7  u8   xor(b[0]..b[6])
 
-Не сошлось — мусор. (len & 0x7FFF) != размер — мусор.
+XOR mismatch → drop. (len & 0x7FFF) != datagram size → drop.
 
     0 handshake   1 data   2 video   3 file   4 ACK   5 cmd   6 ack2
 
-Type-2 seq += 8. Сид type-2 = u16 @ offset 8 в type-0.
+Type-2 seq += 8. Type-2 seed = u16 at offset 8 of type-0.
 
 
-5. build_handshake — шаблон @ 0x141543120
------------------------------------------
+5. Handshake template @ 0x141543120
+-----------------------------------
 
     30 80 3A DD 00 00 00 57 D0 E9 64 00 64 00 C0 05 14 00 00 0A 00
     64 00 64 00 C0 05 14 00 00 64 00 14 00 64 00 C0 05 14 00 00 64
     00 01 01 04 0A 02
 
-session в [2:4], xor в [7]. Долбят type-0 пока не придёт 1/2.
-Крипты нет. «startup probe timed out after N handshakes» — их же лог.
+session in [2:4], xor in [7]. Repeat type-0 until type-1/2.
+Their log: “startup probe timed out after N handshakes”.
 
 
-6. Видео: parse_video, FrameAssembler, и твой грязный секрет
------------------------------------------------------------
+6. Video — parse_video, reassembly, bootstrap
+---------------------------------------------
 
     +0x10 frame
     +0x11 n_parts / part
     +0x14 Annex-B
 
-Склейка частей — reassembly.rs, у меня FrameAssembler.
-
-G3: High Profile, IDR почти нет. VideoToolbox/ffplay-h264 висят.
-
-ИХ СОБСТВЕННАЯ СТРОКА В EXE:
+G3 liveview is High Profile with almost no IDR. VideoToolbox and
+ffplay-as-h264 stall or smear. The binary already says so:
 
     preview injected H.264 bootstrap after ... without real IDR;
     dropped ... held AUs ... and released current AU
@@ -155,103 +144,104 @@ G3: High Profile, IDR почти нет. VideoToolbox/ffplay-h264 висят.
 
     src\h264_bootstrap_image.rs
 
-Автор ЗНАЕТ что IDR нет. Вместо того чтобы написать в readme
-«ставьте SHOW_ALL», он ВТЫКАЕТ фейковый bootstrap AU в превью и в
-запись, дропает кадры, и продаёт это как продукт. Loss recovery в UI
-при этом орёт ON.
+They inject a synthetic bootstrap AU into preview and recording, and
+drop/hold access units around it, because the demuxer wants a RAP.
+That is a local decoder hack. It is not an IDR from the goggles. Files
+written that way are not a clean Annex-B capture.
 
-Я в liveview.py делаю FLAG2_SHOW_ALL + LOW_DELAY и не подсовываю
-фейковый IDR в файл. Потому что я не мошенник на превью.
+This lab: libav FLAG2_SHOW_ALL + LOW_DELAY for the window; disk output
+is the type-2 payload as received. No synthetic IDR in --out.
 
 
-7. ACK — build_ack, keepalive
------------------------------
+7. ACK — build_ack
+------------------
 
-Без type-4 стрим дохнет. Оверлей зелёный.
+No type-4 → stream dies. Overlay can still look “connected”.
 
     [8]  win2 start/end
     [12] resend_count
     [14] resend[]
-    потом окна type3/type5 и опциональный DUML (туда же пихают boost)
+    then type3/type5 windows, optional DUML (bitrate hint piggy-back)
 
-ACK ~30 Hz у меня (--ack-interval 1/30). Можно --ack-every на каждый
-type-2. Их «Wi-Fi ACKs» / «stopping Wi-Fi ACKs» — те же type-4.
+Keepalive ~30 Hz here (--ack-interval 1/30). Optional --ack-every on
+each type-2. Their “Wi-Fi ACKs” / “stopping Wi-Fi ACKs” are type-4.
 
 
-8. LossWindow / rtx.rs — позор на гирлянде
-------------------------------------------
+8. rtx.rs vs the UI toggle
+--------------------------
 
-Шаг 8. Список resend ИГНОРИТСЯ очками если не с первой дыры.
+Seq step 8. Goggles ignore the entire resend list unless it starts at
+the first hole. Documented in their rtx.rs; enforced by firmware.
 
 UI:
 
     Loss recovery: ON / OFF
 
-Провода это не меняет, если список кривой. Сами написали rtx.rs,
-сами не научили UI. «рандомные артефакты Wi-Fi» — это ты, Ich,
-не радио.
+ON only means “put missing seqs in the ACK”. Wrong order, or list not
+starting at the first gap → zero recovery while the label stays ON.
+That is a UI/protocol mismatch, not RF.
+
+Retransmit is still NACK, not FEC. Goggles may not resend.
 
 
-9. parse_data / parse_duml / type-1
------------------------------------
+9. type-1 / DUML
+----------------
 
-~10 Hz. Окна + DUML @ [34]. CRC8 seed 0x77, CRC16 0x3692 — публичные
-таблицы DJI. Не твоя крипта. sender 0x1B очки, 0x02 app.
-
-
-10. build_type5
----------------
-
-Обёртка команд, seq шаг 8. Если MI04 не открылся — boost уходит
-сюда (у меня boost_via=udp). Костыль. У автора на винде «должен»
-быть MI04.
+~10 Hz. Windows + DUML at [34]. CRC8 seed 0x77, CRC16 seed 0x3692 —
+public DJI tables. sender 0x1B goggles, 0x02 app.
 
 
-11. Mi04 / bitrate.rs / worker.rs
+10. type-5
+----------
+
+Command wrapper, seq step 8. If MI04 is not claimed, the bitrate DUML
+goes here (boost_via=udp). Fallback, not a second bitrate protocol.
+
+
+11. MI04 / bitrate.rs / worker.rs
 ---------------------------------
 
     USB\VID_2CA3&PID_0020&MI_04
     ff/43/01 bulk
 
-Claim if 4. НЕ set_configuration, НЕ reset — иначе RNDIS умрёт.
+Claim interface 4. Do not set_configuration, do not reset — that kills
+RNDIS.
 
     sender 0x1B  recv 0xEE  cmdset 0x51 cmd 0x29
     payload ebfeefbe03000f000201010000000001000000 + u32le kbps
-    default 22500 (0x57E4) каждые 250 ms (0xFA)
+    default 22500 (0x57E4) every 250 ms (0xFA)
     UI min 22000 (0x55F0)
 
-Строки:
+Strings:
 
     Bitrate boost (experimental)
     Bitrate boost active: feedback= kbps interval= ms
     Bitrate boost stopped; DJI adaptive bitrate will resume
     DJI USB control driver is not installed
 
-Experimental в сторе. Адаптивный битрейт DJI «resume» — значит ваш
-boost это не управление, а тыканье палкой в MI04. Store ещё и
-драйвер USB control может не встать. Продукт года.
+The packet is real. The name “boost” is not a lock: it is a periodic
+bitrate report/hint. When it stops, their own log says DJI ABR resumes.
+If the USB control driver is missing, they have no MI04 and the hint
+never lands on if 4.
 
 
-12. Session.run — как крутится приём
-------------------------------------
+12. Receive loop
+----------------
 
-    bind UDP (0.0.0.0 или 192.168.60.1)
-    handshake на wifi и/или wired пока нет линка
+    bind UDP (0.0.0.0 or 192.168.60.1)
+    type-0 to wifi and/or wired until linked
     type-1 → telemetry ACK
-    type-2 → assembler, RTX gaps, ACK на конец кадра
-    timeout 1s без видео → stalled, LossWindow.reset
-    boost: пробуем Mi04.open каждые 2с, иначе type-5
-    recv_burst — не по одному recvfrom, иначе 1080p на RNDIS сыпется
+    type-2 → assembler, RTX gaps, ACK at end of frame
+    1s without video → stalled, reset loss window
+    boost: try Mi04.open every 2s, else type-5
+    burst recv — one recvfrom per loop drops 1080p on RNDIS
 
-У них: «liveview probe has no bound socket; restarting source search»
-— сокет не биндится, они рестартят поиск. Я хотя бы пишу «кабель /
-RNDIS нет», а не прячу за probe.
+Their: “liveview probe has no bound socket; restarting source search”.
+Usually no NIC / no RNDIS / wrong bind, not a mystery probe.
 
 
-13. liveview.py — LUT, 4:3, RTSP, которые ты ПРОДАЁШЬ
------------------------------------------------------
-
-Их гейты (строки exe):
+13. Edition gates (local only)
+------------------------------
 
     LUT enable blocked by edition/access gate
     Lens 4:3 expansion blocked by edition/access gate
@@ -262,46 +252,48 @@ RNDIS нет», а не прячу за probe.
     Demo expired. Restart the app...
     Consider buying the full version or unlocking with the SquirrelCast app
 
-На проводе DEMO и ACTIVATED одинаковые. LUT — .cube в композиторе,
-не в очках. Ты продаёшь шейдер и 5 минут демо на UDP без ключа.
+Same UDP for demo and paid. LUT is a .cube in the compositor. 5-minute
+demo is a timer on the GUI.
 
-Я LUT/RTSP/4:3 оставил как локальные фильтры ffmpeg без стора.
-Потому что это не «edition». Это lut3d=.
+Here LUT / 4:3 / MPEG-TS are optional local ffmpeg filters. Not an
+edition.
 
 
 14. goggles_adapter.rs
 ----------------------
 
-Windows inbox RNDIS. Мака нет. Встроенный HTML как заменить IP руками.
-«The goggles adapter was configured, but the goggles did not respond
-on the wired link» — классика, когда ты поставил 60.1 не на те очки
-или включил OTG.
+Windows inbox RNDIS. No macOS driver in the exe; HTML for manual IP.
+“The goggles adapter was configured, but the goggles did not respond
+on the wired link” — typically IP on the wrong adapter, or OTG on
+(goggles become USB host → this is method 1, not :9003).
 
-OTG = метод 1. Share liveview USB = OTG выкл. В exe есть строка OTG,
-accessory — NONE. Автор gadget-путь даже не нюхал, только IP.
-
-
-15. Список для обиды, коротко
------------------------------
-
-- XOR назвал сессией и повесил DEMO MODE.
-- Handshake константа, пути C:\Users\Ich\ в релизе.
-- Знает что нет IDR (h264_bootstrap_image.rs) и подсовывает фейк в
-  превью/запись вместо нормального декодера.
-- RTX в UI врёт, первая дыра обязательна.
-- Store не умеет ifconfig, зато умеет 28 МБ HTML.
-- Boost experimental, драйвер USB «не установлен», ABR «resume».
-- Адреса 192.168.2.1:9003 и 60.2 слиплись в одну строку без пробела.
-- Mac не существует. Спеки нет. Есть пейвол на lut3d.
-
-ip-liveview/ — приёмник с провода. Не репак твоего стора.
-Почини RTX и вырежи bootstrap-фейк, потом обижайся.
+This binary is IP liveview only. No AOA gadget path in the strings
+that matter.
 
 
-16. Где «дамп exe»
-------------------
+15. Short
+---------
 
-Файла SquirrelReceiver.exe в этом репо нет и не будет.
+- Session id is a u16; integrity is XOR-7.
+- Handshake is a 48-byte constant.
+- Cargo home path leaked in the Store build.
+- No RAP on the stream; they inject a bootstrap AU locally.
+- RTX list must start at the first hole or firmware drops it; UI ON
+  does not imply recovery.
+- Store build cannot set 192.168.60.1; manuals are inside the exe.
+- Bitrate DUML is experimental feedback; ABR remains in charge.
+- Endpoint strings are concatenated without a separator.
+- No Mac RNDIS stack in this product.
 
-Рядом: docs/squirrel_rdata_dump.txt — строки/модули/VA с этого MD5.
-Сам бинарь: свой Store / свой диск, md5 1661d3520247efddce2576f02a5fa4e4.
+ip-liveview/ (C g3lv, Python notes) speaks the same UDP. It is not a
+repack of the Store app.
+
+
+16. Where the “exe dump” is
+---------------------------
+
+No SquirrelReceiver.exe in this tree.
+
+docs/squirrel_rdata_dump.txt — strings / modules / VAs for
+MD5 1661d3520247efddce2576f02a5fa4e4.
+Get the binary from Store / disk yourself.
