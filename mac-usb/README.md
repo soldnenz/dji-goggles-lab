@@ -1,8 +1,6 @@
-# Mac USB gadget — Method 1 implementation
+# mac-usb — method 1 on Apple Silicon
 
-Same method as `linux-gadget/` (goggles USB host, computer is accessory).
-Darwin plumbing: kext on `IOUSBDeviceController`. See
-[docs/01-usb-gadget.md](../docs/01-usb-gadget.md) and
+Same USB role as `linux-gadget/`. Notes: [docs/01-usb-gadget.md](../docs/01-usb-gadget.md),
 [docs/03-macos-kext.md](../docs/03-macos-kext.md).
 
 ```sh

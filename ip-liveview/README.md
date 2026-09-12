@@ -1,7 +1,7 @@
-# IP liveview — Method 2 implementations
+# ip-liveview — method 2, Goggles 3 only
 
-Wi-Fi, Windows RNDIS, and macOS userspace RNDIS share `protocol.py`.
-See [docs/02-ip-liveview.md](../docs/02-ip-liveview.md).
+Wi-Fi, Windows RNDIS, and macOS tetherkit all use `protocol.py`.
+[docs/02-ip-liveview.md](../docs/02-ip-liveview.md).
 
 ```sh
 python3 -m pip install -r requirements.txt
