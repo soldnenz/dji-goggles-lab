@@ -1,13 +1,13 @@
-# Method 1 kext на macOS
+# kext на macOS
 
-Это не USB. Это политика Apple, и она бесит.
+Без reduced security kext просто не загрузится, какой бы ни был бинарь.
 
-| проверка | что будет |
+| | |
 | --- | --- |
-| Recovery → reduced security / third-party kexts | без этого `kmutil load` шлёт даже идеальный бинарь |
-| Privacy & Security → Allow `com.aspan.usbbridge` | после первого копирования в `/Library/Extensions` |
-| AuxKC | часто ребут после Allow; `kmutil showloaded` без `aspan` = ты ещё тут |
-| подпись | `make kext` ad-hoc (`codesign --sign -`). Для лабы ок. Нотаризации нет и не будет |
+| Recovery → reduced security / third-party kexts | иначе `kmutil load` отшивает |
+| Privacy & Security → Allow `com.aspan.usbbridge` | после копирования в `/Library/Extensions` |
+| AuxKC | часто нужен ребут после Allow; нет `aspan` в `kmutil showloaded` — ещё не сел |
+| подпись | `make kext` ad-hoc (`codesign --sign -`). Нотаризации нет |
 
 ```sh
 cd mac-usb
@@ -17,15 +17,15 @@ kmutil showloaded | grep aspan
 ./scripts/unstage.sh
 ```
 
-| kmutil пишет | на самом деле |
+| kmutil | |
 | --- | --- |
-| not approved | Allow, снова `stage.sh` |
-| AuxKC / collection | один ребут |
-| wrong arch | Makefile только `arm64e` |
-| SIP | Recovery. Intel-`csrutil` с хабра не копипастить |
+| not approved | Allow, потом снова `stage.sh` |
+| AuxKC / collection | ребут |
+| wrong arch | в Makefile только `arm64e` |
+| SIP | Recovery; готовые `csrutil` с хабра для Intel не копировать |
 
-Kext держит lease на gadget description: userspace помер — откат на NCM,
-а не вечный accessory на контроллере. После `unstage.sh` если AuxKC
-ещё держит бандл — ребут.
+Kext держит lease на gadget description: userspace умер — откат на NCM.
+После `unstage.sh` бандл иногда ещё в AuxKC, тогда ребут.
 
-Собранный `.kext`, дампы `probe` и Apple-сертификаты в паблик не нести.
+Собранный `.kext`, дампы `probe` и сертификаты Apple в этот репозиторий
+не кладутся.

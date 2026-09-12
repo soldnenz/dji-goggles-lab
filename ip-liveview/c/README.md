@@ -1,9 +1,6 @@
 # g3lv
 
-C-клиент DJI Goggles 3 IP liveview. POSIX (macOS / Linux).
-
-Пишет Annex-B в `--out`. Декодера нет: High Profile без IDR, VideoToolbox
-и `ffplay -f h264` на этом стриме тупят.
+UDP-клиент liveview Goggles 3. macOS / Linux. Пишет Annex-B в `--out`.
 
 ```
 make
@@ -11,7 +8,6 @@ make
 ./g3lv --wired --boost --no-rtx
 ```
 
-`pkg-config libusb-1.0` — bitrate DUML на USB MI04 (if 4, без
-set_configuration). Нет libusb — собирается всё равно, hint идёт UDP type-5.
-
-Бинарник `g3lv` в git не тащи.
+С `pkg-config libusb-1.0` bitrate DUML идёт на MI04 (interface 4).
+Без libusb собирается тоже, hint тогда UDP type-5.
+Не вызывать `set_configuration`.

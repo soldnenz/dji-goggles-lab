@@ -1,6 +1,6 @@
-# linux-gadget — метод 1 на Pi
+# linux-gadget
 
-Тот же USB-роль что `mac-usb/`: очки host, Pi accessory.
+Очки — USB host, Pi — accessory. То же, что `mac-usb/`.
 
 ```sh
 sudo apt install python3

@@ -1,6 +1,7 @@
-# mac-usb — метод 1 на Apple Silicon
+# mac-usb
 
-Тот же USB-роль что `linux-gadget/`.
+Очки — USB host, Mac — accessory. То же, что `linux-gadget/`.
+
 [docs/01-usb-gadget.md](../docs/01-usb-gadget.md),
 [docs/03-macos-kext.md](../docs/03-macos-kext.md).
 
