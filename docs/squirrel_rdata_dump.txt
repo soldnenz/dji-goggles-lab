@@ -1,0 +1,80 @@
+SquirrelReceiver.exe rdata/strings dump
+MD5 1661d3520247efddce2576f02a5fa4e4  ~28MB PE64
+exe itself is NOT in this repo
+
+VA
+  141543120  handshake 48 bytes
+             30803add00000057d0e964006400c0051400000a00
+             64006400c005140000640014006400c00514000064
+             000101040a02
+  xref       sub_1400C0320
+  14153A7F0  192.168.2.1:9003
+  14153A800  192.168.60.2:9003
+  141543108  src\protocol.rs
+  140F8D150  sendto IAT
+  140F8D160  recvfrom IAT
+  140F8D140  bind IAT
+
+cargo leak
+  C:\Users\Ich\.cargo\registry\src\index.crates.io-...
+
+their sources (not crates)
+  src\protocol.rs
+  src\rtx.rs
+  src\reassembly.rs
+  src\camera_control.rs
+  src\goggles_adapter.rs
+  src\h264_bootstrap_image.rs
+  src\device_control\bitrate.rs
+  src\device_control\camera.rs
+  src\device_control\camera_hardware.rs
+  src\device_control\camera_wire.rs
+  src\device_control\duml.rs
+  src\device_control\mi04.rs
+  src\device_control\worker.rs
+  src\engine\effects.rs
+  src\engine\idle_preview.rs
+  src\engine\preview_health.rs
+  src\engine\preview_pipeline.rs
+  src\engine\preview_state.rs
+  src\engine\recording.rs
+  src\engine\rtsp_streaming.rs
+  src\engine\safety_replay.rs
+  src\engine\stream.rs
+  src\engine\transport.rs
+  src\entitlement\mod.rs
+  src\entitlement\store.rs
+  src\ui\activation_overlay.rs
+  src\ui\app.rs
+  src\ui\demo_watermark_overlay.rs
+  src\ui\preferences.rs
+  src\ui\settings_overlay.rs
+  src\ui\toolbar_overlay.rs
+  src\ui\video_host.rs
+  src\ui\waiting_screen_overlay.rs
+  src\main.rs
+
+USB
+  USB\VID_2CA3&PID_0020&MI_04
+  USB\VID_2CA3&PID_0020&MI_00
+
+logs / UI
+  liveview probe has no bound socket; restarting source search
+  preview injected H.264 bootstrap after ... without real IDR
+  Recording injected H.264 bootstrap after ...
+  startup probe timed out after N handshakes
+  Bitrate boost (experimental)
+  Bitrate boost stopped; DJI adaptive bitrate will resume
+  DJI USB control driver is not installed
+  Loss recovery: ON / OFF
+  DEMO MODE / ACTIVATED / ACTIVATION REVOKED / STORE LICENSE NOT VERIFIED
+  Demo mode is limited to 5 minutes
+  LUT enable blocked by edition/access gate
+  Recording arm blocked by edition/access gate
+  Lens 4:3 expansion blocked by edition/access gate
+  The Microsoft Store edition cannot change Windows network adapter settings automatically
+
+HWID / IPs
+  192.168.2.1:9003
+  192.168.60.2:9003
+  192.168.60.1 / 255.255.255.0 empty gateway

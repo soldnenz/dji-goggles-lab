@@ -96,9 +96,9 @@ python3 ip-liveview/mac_wired.py --view
 
 Подробнее: [docs/02-ip-liveview.md](docs/02-ip-liveview.md).
 
-Разбор чужого Windows-клиента (SquirrelReceiver.exe) — обычный txt, без
-md-превью: [docs/squirrel_exe_reverse.txt](docs/squirrel_exe_reverse.txt).
-Exe в репо нет, копирайта на диск не льём.
+Разбор чужого Windows-клиента: [docs/squirrel_exe_reverse.txt](docs/squirrel_exe_reverse.txt).
+Строки/VA с того же MD5: [docs/squirrel_rdata_dump.txt](docs/squirrel_rdata_dump.txt).
+Сам `.exe` (28 МБ стора) в репо нет.
 
 ## Где что лежит
 
